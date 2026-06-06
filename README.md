@@ -234,66 +234,126 @@ This pattern uses **IAM-based authentication with workload identity tokens**:
 
 ## Testing
 
-The included `test_multi_agent.py` script is **infrastructure-agnostic** and works with any deployment method (Terraform, CDK, CloudFormation, or manual).
+### How It Works
+
+You send a question to the **Orchestrator** agent. Based on what you ask, it decides whether to:
+- Answer directly (simple greetings)
+- Route to the **Specialist** (for detailed analysis)
+- Route to the **Fact Checker** (for verifying claims)
+- Route to **both** (for complex questions that need analysis AND verification)
+
+You only need the Orchestrator's ARN — it handles all the routing internally.
 
 ### Prerequisites for Testing
 
-Before testing, ensure you have the required packages installed:
+Install boto3 (the AWS SDK for Python):
 
-**Option A: Using uv (Recommended)**
 ```bash
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-uv pip install boto3  # Required for agent invocation
+pip install boto3
 ```
 
-**Option B: System-wide installation**
-```bash
-pip install boto3  # Required for agent invocation
-```
+Ensure your AWS CLI is configured with credentials that have `bedrock-agentcore:InvokeAgentRuntime` permission.
 
-**Note**: `boto3` is required for the test script to invoke both agent runtimes via AWS API.
+### Quick Test — Ask Your Own Question
 
-### Basic Testing
-
-**Linux/macOS:**
-```bash
-# Get ARNs from Terraform
-ORCHESTRATOR_ARN=$(terraform output -raw orchestrator_runtime_arn)
-
-# Test all agents (Orchestrator routes to Specialist and Fact Checker via A2A)
-python test_multi_agent.py $ORCHESTRATOR_ARN
-```
-
-**Windows (PowerShell):**
+**PowerShell (Windows):**
 ```powershell
-# Get ARNs from Terraform
-$ORCHESTRATOR_ARN = terraform output -raw orchestrator_runtime_arn
+# Get your Orchestrator ARN
+$ARN = terraform output -raw orchestrator_runtime_arn
 
-# Test all agents (Orchestrator routes to Specialist and Fact Checker via A2A)
-python test_multi_agent.py $ORCHESTRATOR_ARN
+# Ask anything — the Orchestrator decides which agents to use
+python -c "
+import boto3, json
+from botocore.config import Config
+
+client = boto3.client('bedrock-agentcore', region_name='us-east-1',
+    config=Config(read_timeout=300))
+
+response = client.invoke_agent_runtime(
+    agentRuntimeArn='$ARN',
+    qualifier='DEFAULT',
+    payload=json.dumps({'prompt': 'YOUR QUESTION HERE'}),
+)
+
+result = json.loads(response['response'].read())
+print(json.dumps(result, indent=2))
+"
 ```
 
-> **Note**: You only need the Orchestrator ARN. The test script exercises all three agents by sending queries that trigger A2A routing to both the Specialist and Fact Checker.
+**Example prompts and which agents they trigger:**
 
-### Test Scenarios
+| Prompt | Agents Used |
+|--------|------------|
+| `"Hello, who are you?"` | Orchestrator only (no A2A) |
+| `"Explain how microservices differ from monolithic architectures"` | Orchestrator → Specialist |
+| `"Is it true that Python is faster than C++?"` | Orchestrator → Fact Checker |
+| `"Explain serverless computing and verify that Lambda has a 15-minute timeout"` | Orchestrator → Specialist AND Fact Checker |
 
-The script runs four tests:
-1. **Simple Query**: Basic orchestrator invocation (no A2A)
-2. **Specialist A2A**: Orchestrator delegates to Specialist agent
-3. **Fact Checker A2A**: Orchestrator delegates to Fact Checker agent
-4. **Multi-Agent A2A**: Orchestrator calls BOTH Specialist and Fact Checker in one request
+### Running the Test Suite
 
-### Expected Output
+The included test script runs all four scenarios automatically:
 
+```powershell
+$ARN = terraform output -raw orchestrator_runtime_arn
+python test_multi_agent.py $ARN
 ```
-TEST 1: Simple Query (Orchestrator) ✅
-TEST 2: Complex Query with A2A Communication (Specialist) ✅
-TEST 3: Fact Check Query (Fact Checker Agent) ✅
-TEST 4: Multi-Agent Query (Both Specialist AND Fact Checker) ✅
 
-✅ ALL TESTS PASSED
+### Observing the Results
+
+After invoking the agents, you can see what happened:
+
+**1. View agent responses** (immediate — in your terminal output)
+
+The response JSON shows which agent processed your request:
+```json
+{
+  "status": "success",
+  "agent": "orchestrator",
+  "response": "Based on my analysis and the specialist's input..."
+}
 ```
+
+**2. View A2A application logs** (CloudWatch → Log groups)
+
+Go to CloudWatch Logs and open the Orchestrator's log group:
+```
+/aws/bedrock-agentcore/runtimes/agentcore_multi_agent_OrchestratorAgent-<id>-DEFAULT
+```
+
+Filter for A2A activity:
+```
+A2A_CALL
+```
+
+You'll see entries like:
+```
+A2A_CALL_START | agent=specialist | query_length=85
+A2A_CALL_END | agent=specialist | latency_ms=12340 | response_length=1523
+A2A_CALL_START | agent=factchecker | query_length=62
+A2A_CALL_END | agent=factchecker | latency_ms=8210 | response_length=312
+```
+
+**3. View distributed traces** (CloudWatch → GenAI Observability)
+
+Go to: **CloudWatch** → **Application Signals** → **Generative AI**
+
+This shows a visual dashboard with:
+- Each agent as a node
+- Invocation counts and latency between agents
+- Token usage per call
+- Error rates
+
+**4. Query trace spans directly** (CloudWatch → Logs Insights)
+
+Select log group `aws/spans` and run:
+```
+fields @timestamp, name, durationNano / 1000000 as ms
+| filter name like /call_specialist|call_factchecker|InvokeAgentRuntime|invoke_agent/
+| sort @timestamp desc
+| limit 20
+```
+
+This shows the full trace hierarchy — Orchestrator calling Specialist and/or Fact Checker, with exact timing for each hop.
 
 ## Agent Capabilities
 
