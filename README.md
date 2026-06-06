@@ -256,38 +256,26 @@ Ensure your AWS CLI is configured with credentials that have `bedrock-agentcore:
 
 ### Quick Test — Ask Your Own Question
 
-**PowerShell (Windows):**
+Use the included `ask.py` script:
+
 ```powershell
-# Get your Orchestrator ARN
-$ARN = terraform output -raw orchestrator_runtime_arn
+# Simple greeting (Orchestrator answers directly)
+python ask.py "Hello, who are you?"
 
-# Ask anything — the Orchestrator decides which agents to use
-python -c "
-import boto3, json
-from botocore.config import Config
+# Analysis question (routes to Specialist)
+python ask.py "Explain how microservices differ from monolithic architectures"
 
-client = boto3.client('bedrock-agentcore', region_name='us-east-1',
-    config=Config(read_timeout=300))
+# Fact-check question (routes to Fact Checker)
+python ask.py "Is it true that Python is faster than C++?"
 
-response = client.invoke_agent_runtime(
-    agentRuntimeArn='$ARN',
-    qualifier='DEFAULT',
-    payload=json.dumps({'prompt': 'YOUR QUESTION HERE'}),
-)
-
-result = json.loads(response['response'].read())
-print(json.dumps(result, indent=2))
-"
+# Complex question (routes to BOTH Specialist and Fact Checker)
+python ask.py "Explain serverless computing and verify that Lambda has a 15-minute timeout"
 ```
 
-**Example prompts and which agents they trigger:**
-
-| Prompt | Agents Used |
-|--------|------------|
-| `"Hello, who are you?"` | Orchestrator only (no A2A) |
-| `"Explain how microservices differ from monolithic architectures"` | Orchestrator → Specialist |
-| `"Is it true that Python is faster than C++?"` | Orchestrator → Fact Checker |
-| `"Explain serverless computing and verify that Lambda has a 15-minute timeout"` | Orchestrator → Specialist AND Fact Checker |
+You can also pass the ARN directly if you're not in the Terraform directory:
+```powershell
+python ask.py "Your question" "arn:aws:bedrock-agentcore:us-east-1:123456789:runtime/your-agent-id"
+```
 
 ### Running the Test Suite
 
