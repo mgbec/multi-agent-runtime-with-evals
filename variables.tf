@@ -88,3 +88,10 @@ variable "bedrock_model_id" {
   type        = string
   default     = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 }
+
+variable "tavily_api_key" {
+  description = "Tavily Search API key for web search capabilities (get free key at https://app.tavily.com)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}

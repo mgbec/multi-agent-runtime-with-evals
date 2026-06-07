@@ -21,6 +21,7 @@ resource "aws_bedrockagentcore_agent_runtime" "specialist" {
     AWS_REGION         = data.aws_region.current.region
     AWS_DEFAULT_REGION = data.aws_region.current.region
     BEDROCK_MODEL_ID   = var.bedrock_model_id
+    TAVILY_API_KEY     = var.tavily_api_key
   }
 
   tags = {
