@@ -43,6 +43,7 @@ aws-credentials
 output.json
 response.json
 body.json
+a2a_report.json
 
 # ============================================================================
 # Python
