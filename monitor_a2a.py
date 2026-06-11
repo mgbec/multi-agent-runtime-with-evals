@@ -473,6 +473,93 @@ def main():
     # Report
     generate_report(calls, findings, args.hours, output_json=args.json)
 
+    # Write explanation file
+    write_checks_explanation()
+
+
+def write_checks_explanation():
+    """Write a file explaining what each security check does."""
+    explanation = {
+        "title": "A2A Security Monitor - Checks Explanation",
+        "description": "This document explains each security check performed by monitor_a2a.py on inter-agent (A2A) communication logs.",
+        "checks": [
+            {
+                "name": "Unauthorized Targets",
+                "function": "check_unauthorized_targets",
+                "severity": "HIGH",
+                "description": "Verifies that the Orchestrator only calls agents in the approved list (specialist, factchecker). An unapproved target could indicate prompt injection causing the agent to call an unintended endpoint, or a misconfiguration routing traffic to the wrong agent.",
+                "what_triggers_it": "An A2A_CALL_START log entry with a target name not in the ALLOWED_TARGETS set.",
+                "why_it_matters": "If an attacker manipulates the Orchestrator into calling an unauthorized agent, they could exfiltrate data or escalate privileges. IAM policies provide a hard guardrail, but this check catches the attempt at the application layer.",
+                "thresholds": "Any single occurrence is flagged as HIGH severity.",
+            },
+            {
+                "name": "Prompt Injection Detection",
+                "function": "check_prompt_injection",
+                "severity": "MEDIUM",
+                "description": "Scans the payloads sent between agents for patterns commonly used in prompt injection attacks. These patterns attempt to override the agent's system prompt or extract sensitive information.",
+                "what_triggers_it": "An A2A_CALL_PAYLOAD log entry containing text matching known injection patterns (e.g., 'ignore previous instructions', 'reveal system prompt', 'you are now', etc.).",
+                "why_it_matters": "A user could craft input that, when forwarded by the Orchestrator to a downstream agent, attempts to override that agent's instructions. This is a second-hop injection — the attack passes through the Orchestrator to reach the Specialist or Fact Checker.",
+                "thresholds": "Any match against the injection pattern list triggers a MEDIUM finding. The patterns cover: instruction override, system prompt extraction, role reassignment, and XML/code injection markers.",
+            },
+            {
+                "name": "Abnormal Payload Sizes",
+                "function": "check_payload_sizes",
+                "severity": "MEDIUM (queries) / LOW (responses)",
+                "description": "Flags unusually large data being sent to or received from downstream agents. Large outbound payloads may indicate data stuffing (embedding sensitive data in the query). Large responses are less concerning but could indicate unexpected behavior.",
+                "what_triggers_it": "query_length > 5000 characters (outbound) or response_length > 50000 characters (inbound).",
+                "why_it_matters": "An attacker could use prompt injection to cause the Orchestrator to embed sensitive context, conversation history, or system information into the query sent to a downstream agent — effectively using A2A as a data exfiltration channel.",
+                "thresholds": f"Outbound query > {5000} chars = MEDIUM. Inbound response > {50000} chars = LOW.",
+            },
+            {
+                "name": "Latency Anomalies",
+                "function": "check_latency_anomalies",
+                "severity": "MEDIUM (too fast) / LOW (too slow)",
+                "description": "Detects A2A calls with unusual timing. Very slow calls may indicate resource abuse, stuck agents, or denial-of-service conditions. Very fast calls may indicate the agent returned without processing (bypassed logic, cached/replayed responses).",
+                "what_triggers_it": f"latency_ms > {120000}ms (too slow) or latency_ms < {100}ms (too fast).",
+                "why_it_matters": "Slow calls could indicate an agent caught in a loop or being abused for compute. Fast calls could indicate a compromised agent returning hardcoded responses without invoking the LLM.",
+                "thresholds": f"Above {120000}ms = LOW (high latency). Below {100}ms = MEDIUM (suspiciously fast).",
+            },
+            {
+                "name": "Error Rate",
+                "function": "check_error_rate",
+                "severity": "HIGH (rate > 10%) / MEDIUM (individual errors)",
+                "description": "Monitors the failure rate of A2A calls. A sudden spike in errors could indicate permission changes, resource exhaustion, agent crashes, or an ongoing attack causing repeated failures.",
+                "what_triggers_it": "More than 10% of A2A calls returning errors, or any individual A2A_CALL_ERROR log entry.",
+                "why_it_matters": "Elevated error rates impact system reliability and may indicate an attacker probing for vulnerabilities (e.g., sending malformed payloads to cause crashes).",
+                "thresholds": "Error rate > 10% = HIGH. Individual errors = MEDIUM.",
+            },
+            {
+                "name": "Call Frequency",
+                "function": "check_call_frequency",
+                "severity": "MEDIUM",
+                "description": "Detects bursts of A2A calls within short time windows. An abnormally high number of calls in a single minute could indicate a runaway loop, automated abuse, or denial-of-service attack against downstream agents.",
+                "what_triggers_it": "More than 20 A2A_CALL_START events within any single 1-minute window.",
+                "why_it_matters": "High-frequency A2A calls consume compute resources on downstream agents, incur LLM costs, and could be used to exhaust quotas or create billing attacks.",
+                "thresholds": "> 20 calls per minute = MEDIUM.",
+            },
+        ],
+        "configuration": {
+            "ALLOWED_TARGETS": ["specialist", "factchecker"],
+            "MAX_QUERY_LENGTH": 5000,
+            "MAX_RESPONSE_LENGTH": 50000,
+            "MAX_LATENCY_MS": 120000,
+            "MIN_LATENCY_MS": 100,
+            "ERROR_RATE_THRESHOLD": "10%",
+            "FREQUENCY_THRESHOLD": "20 calls per minute",
+        },
+        "notes": [
+            "All checks run against application-level logs (A2A_CALL_* entries) in the Orchestrator's CloudWatch log group.",
+            "IAM policies provide a hard guardrail for unauthorized targets — this script provides defense-in-depth detection at the application layer.",
+            "Prompt injection detection uses regex patterns and may produce false positives for legitimate queries that happen to contain matching phrases.",
+            "Thresholds can be adjusted in the CONFIGURATION section at the top of monitor_a2a.py.",
+        ],
+    }
+
+    output_file = "monitor_checks_explained.json"
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(explanation, f, indent=2, ensure_ascii=False)
+    print(f"\n  Checks explanation written to: {output_file}")
+
 
 if __name__ == "__main__":
     main()
