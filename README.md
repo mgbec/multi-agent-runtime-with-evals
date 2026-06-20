@@ -236,8 +236,8 @@ The deployment follows a strict sequence to ensure proper dependencies:
 ```
 
 **Critical Dependencies:**
-- Orchestrator runtime depends on both Specialist and Fact Checker being created first
-- Orchestrator receives `SPECIALIST_ARN` and `FACTCHECKER_ARN` as environment variables
+- Orchestrator runtime depends on Specialist, Fact Checker, and Critic being created first
+- Orchestrator receives `SPECIALIST_ARN`, `FACTCHECKER_ARN`, and `CRITIC_ARN` as environment variables
 
 ### Build Triggers
 
@@ -304,11 +304,17 @@ python ask.py "Your question" "arn:aws:bedrock-agentcore:us-east-1:123456789:run
 
 ### Running the Test Suite
 
-The included test script runs all four scenarios automatically:
+The included test scripts run scenarios automatically:
 
 ```powershell
+# Full multi-agent test (6 scenarios including Critic)
 $ARN = terraform output -raw orchestrator_runtime_arn
 python test_multi_agent.py $ARN
+
+# Critic feedback loop tests (5 scenarios)
+python test_critic_loop.py              # Quick test (first 2)
+python test_critic_loop.py --all        # All 5 scenarios
+python test_critic_loop.py --scenario 4 # Specific scenario
 ```
 
 ### Observing the Results
@@ -504,7 +510,8 @@ multi-agent-runtime/
 │   ├── build-image.ps1          # PowerShell build script (Windows)
 │   └── build-image.sh           # Bash build script (Linux/macOS)
 ├── ask.py                       # Single-question test script
-├── test_multi_agent.py          # Full test suite (4 scenarios)
+├── test_multi_agent.py          # Full test suite (6 scenarios)
+├── test_critic_loop.py          # Critic feedback loop test suite (5 scenarios)
 ├── monitor_a2a.py               # A2A security monitoring script
 ├── check_a2a.py                 # A2A call log inspector
 ├── orchestrator.tf              # Orchestrator runtime configuration
