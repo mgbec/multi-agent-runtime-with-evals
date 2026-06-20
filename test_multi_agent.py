@@ -207,6 +207,30 @@ def test_multi_agent(orchestrator_arn, specialist_arn=None):
     )
     test_results.append(("A2A Multi-Agent Communication", result))
 
+    # Test 5: Quality evaluation triggering Critic agent
+    print("\n" + "=" * 80)
+    print("TEST 5: Quality Evaluation (Critic Agent)")
+    print("=" * 80)
+    result = test_agent(
+        agentcore_client,
+        orchestrator_arn,
+        "Orchestrator",
+        "Get the specialist to explain what Kubernetes is, then use the critic to evaluate the quality of the response. Tell me what score the critic gave.",
+    )
+    test_results.append(("A2A Communication - Critic", result))
+
+    # Test 6: Full feedback loop (Specialist → Critic → retry)
+    print("\n" + "=" * 80)
+    print("TEST 6: Quality Feedback Loop (Specialist → Critic → Improved Response)")
+    print("=" * 80)
+    result = test_agent(
+        agentcore_client,
+        orchestrator_arn,
+        "Orchestrator",
+        "This is an important question that needs a high-quality answer. Ask the specialist to explain API gateway patterns, then have the critic evaluate it. If the critic scores it below 8, ask the specialist again incorporating the critic's feedback. I want the best possible answer.",
+    )
+    test_results.append(("A2A Quality Feedback Loop", result))
+
     # Summary
     print("\n" + "=" * 80)
     print("TEST SUMMARY")
