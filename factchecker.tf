@@ -18,10 +18,12 @@ resource "aws_bedrockagentcore_agent_runtime" "factchecker" {
   }
 
   environment_variables = {
-    AWS_REGION         = data.aws_region.current.region
-    AWS_DEFAULT_REGION = data.aws_region.current.region
-    BEDROCK_MODEL_ID   = var.bedrock_model_id
-    TAVILY_API_KEY     = var.tavily_api_key
+    AWS_REGION             = data.aws_region.current.region
+    AWS_DEFAULT_REGION     = data.aws_region.current.region
+    BEDROCK_MODEL_ID       = var.bedrock_model_id
+    TAVILY_SECRET_ARN      = aws_secretsmanager_secret.tavily_api_key.arn
+    BEDROCK_GUARDRAIL_ID   = aws_bedrock_guardrail.agent_guardrail.guardrail_id
+    BEDROCK_GUARDRAIL_VER  = aws_bedrock_guardrail_version.agent_guardrail.version
   }
 
   tags = {

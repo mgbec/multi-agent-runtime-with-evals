@@ -5,7 +5,7 @@ import os
 import json
 import logging
 import urllib.request
-import urllib.parse
+import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
 app = BedrockAgentCoreApp()
@@ -18,8 +18,23 @@ if not logger.handlers:
     handler.setFormatter(logging.Formatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s"))
     logger.addHandler(handler)
 
-# Tavily API key from environment variable
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
+
+def get_tavily_api_key():
+    """Retrieve Tavily API key from Secrets Manager (or fall back to env var)."""
+    secret_arn = os.getenv("TAVILY_SECRET_ARN", "")
+    if secret_arn:
+        try:
+            region = os.getenv("AWS_REGION", "us-east-1")
+            client = boto3.client("secretsmanager", region_name=region)
+            response = client.get_secret_value(SecretId=secret_arn)
+            return response["SecretString"]
+        except Exception as e:
+            logger.warning(f"Failed to retrieve secret from Secrets Manager: {e}")
+    # Fall back to direct env var (for local testing)
+    return os.getenv("TAVILY_API_KEY", "")
+
+
+TAVILY_API_KEY = get_tavily_api_key()
 
 
 @tool
@@ -101,7 +116,16 @@ def create_specialist_agent() -> Agent:
     Cite sources by including relevant URLs."""
 
     model_id = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
-    model = BedrockModel(model_id=model_id)
+    guardrail_id = os.getenv("BEDROCK_GUARDRAIL_ID", "")
+    guardrail_ver = os.getenv("BEDROCK_GUARDRAIL_VER", "")
+
+    model_kwargs = {"model_id": model_id}
+    if guardrail_id and guardrail_ver:
+        model_kwargs["guardrail_config"] = {
+            "guardrailIdentifier": guardrail_id,
+            "guardrailVersion": guardrail_ver,
+        }
+    model = BedrockModel(**model_kwargs)
 
     tools = [web_search] if TAVILY_API_KEY else []
 

@@ -152,7 +152,9 @@ def call_critic_agent(content_to_evaluate: str) -> Dict[str, Any]:
 
 def create_orchestrator_agent() -> Agent:
     """Create the orchestrator agent with tools to call specialist, fact checker, and critic"""
-    system_prompt = """You are an orchestrator agent that coordinates between specialized agents.
+    max_retries = int(os.getenv("MAX_CRITIC_RETRIES", "2"))
+
+    system_prompt = f"""You are an orchestrator agent that coordinates between specialized agents.
     You have three tools available:
 
     1. call_specialist_agent - For detailed analysis, explanations, and complex research tasks
@@ -170,13 +172,23 @@ def create_orchestrator_agent() -> Agent:
     - Pass the critic both the original question AND the specialist's response
     - If the critic scores below 7/10, call the specialist again with the critic's feedback
     - Include the critic's suggestion in your retry prompt to the specialist
+    - IMPORTANT: Maximum {max_retries} retries allowed. After {max_retries} retries, use the best response you have.
     - Present the final (improved) response to the user
 
     When using multiple tools, synthesize their responses into a coherent answer.
     Always mention if you used the critic to improve a response."""
 
     model_id = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
-    model = BedrockModel(model_id=model_id)
+    guardrail_id = os.getenv("BEDROCK_GUARDRAIL_ID", "")
+    guardrail_ver = os.getenv("BEDROCK_GUARDRAIL_VER", "")
+
+    model_kwargs = {"model_id": model_id}
+    if guardrail_id and guardrail_ver:
+        model_kwargs["guardrail_config"] = {
+            "guardrailIdentifier": guardrail_id,
+            "guardrailVersion": guardrail_ver,
+        }
+    model = BedrockModel(**model_kwargs)
 
     return Agent(
         model=model,

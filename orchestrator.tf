@@ -19,12 +19,15 @@ resource "aws_bedrockagentcore_agent_runtime" "orchestrator" {
 
   # CRITICAL: Specialist Agent ARN for A2A communication
   environment_variables = {
-    AWS_REGION         = data.aws_region.current.region
-    AWS_DEFAULT_REGION = data.aws_region.current.region
-    SPECIALIST_ARN     = aws_bedrockagentcore_agent_runtime.specialist.agent_runtime_arn
-    FACTCHECKER_ARN    = aws_bedrockagentcore_agent_runtime.factchecker.agent_runtime_arn
-    CRITIC_ARN         = aws_bedrockagentcore_agent_runtime.critic.agent_runtime_arn
-    BEDROCK_MODEL_ID   = var.bedrock_model_id
+    AWS_REGION             = data.aws_region.current.region
+    AWS_DEFAULT_REGION     = data.aws_region.current.region
+    SPECIALIST_ARN         = aws_bedrockagentcore_agent_runtime.specialist.agent_runtime_arn
+    FACTCHECKER_ARN        = aws_bedrockagentcore_agent_runtime.factchecker.agent_runtime_arn
+    CRITIC_ARN             = aws_bedrockagentcore_agent_runtime.critic.agent_runtime_arn
+    BEDROCK_MODEL_ID       = var.bedrock_model_id
+    BEDROCK_GUARDRAIL_ID   = aws_bedrock_guardrail.agent_guardrail.guardrail_id
+    BEDROCK_GUARDRAIL_VER  = aws_bedrock_guardrail_version.agent_guardrail.version
+    MAX_CRITIC_RETRIES     = "2"
   }
 
   tags = {

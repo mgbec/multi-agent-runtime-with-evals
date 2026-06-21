@@ -222,6 +222,15 @@ resource "aws_iam_role_policy" "specialist_execution" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      # Secrets Manager - Tavily API key
+      {
+        Sid    = "SecretsManagerAccess"
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = aws_secretsmanager_secret.tavily_api_key.arn
+      },
       # ECR Access for Specialist
       {
         Sid    = "ECRImageAccess"
@@ -465,6 +474,15 @@ resource "aws_iam_role_policy" "factchecker_execution" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      # Secrets Manager - Tavily API key
+      {
+        Sid    = "SecretsManagerAccess"
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = aws_secretsmanager_secret.tavily_api_key.arn
+      },
       # ECR Access for Fact Checker
       {
         Sid    = "ECRImageAccess"
