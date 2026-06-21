@@ -104,7 +104,7 @@ def query_logs(logs_client, log_group_name, query_string, minutes_back=120):
     return result["results"]
 
 
-def get_recent_session_ids(logs_client, log_group, limit=5):
+def get_recent_session_ids(logs_client, log_group, limit=5, minutes_back=120):
     """Get the most recent session IDs from traces."""
     query = f"""fields @timestamp, attributes.`session.id` as session_id
     | filter ispresent(attributes.`session.id`)
@@ -112,7 +112,7 @@ def get_recent_session_ids(logs_client, log_group, limit=5):
     | sort last_seen desc
     | limit {limit}"""
 
-    results = query_logs(logs_client, log_group, query)
+    results = query_logs(logs_client, log_group, query, minutes_back=minutes_back)
     sessions = []
     for row in results:
         for field in row:
@@ -121,7 +121,7 @@ def get_recent_session_ids(logs_client, log_group, limit=5):
     return sessions
 
 
-def collect_session_spans(logs_client, log_group, session_id):
+def collect_session_spans(logs_client, log_group, session_id, minutes_back=120):
     """Collect all span logs for a given session."""
     # Query the agent runtime logs
     query = f"""fields @timestamp, @message
@@ -129,14 +129,14 @@ def collect_session_spans(logs_client, log_group, session_id):
     | filter attributes.`session.id` = "{session_id}"
     | sort @timestamp asc"""
 
-    runtime_results = query_logs(logs_client, log_group, query)
+    runtime_results = query_logs(logs_client, log_group, query, minutes_back=minutes_back)
 
     # Also query aws/spans
     aws_spans_query = f"""fields @timestamp, @message
     | filter `session.id` = "{session_id}" or attributes.`session.id` = "{session_id}"
     | sort @timestamp asc"""
 
-    aws_span_results = query_logs(logs_client, "aws/spans", aws_spans_query)
+    aws_span_results = query_logs(logs_client, "aws/spans", aws_spans_query, minutes_back=minutes_back)
 
     # Extract JSON messages
     spans = []
@@ -203,11 +203,11 @@ def run_evaluation(agentcore_client, evaluator_id, session_spans, trace_ids=None
         return [{"evaluatorId": evaluator_id, "errorMessage": str(e), "errorCode": "CLIENT_ERROR"}]
 
 
-def evaluate_session(agentcore_client, logs_client, log_group, session_id):
+def evaluate_session(agentcore_client, logs_client, log_group, session_id, minutes_back=120):
     """Run all evaluators against a session and return results."""
     print(f"\n  Collecting spans for session: {session_id[:20]}...")
 
-    spans = collect_session_spans(logs_client, log_group, session_id)
+    spans = collect_session_spans(logs_client, log_group, session_id, minutes_back=minutes_back)
     if not spans:
         return {"session_id": session_id, "error": "No spans found", "results": []}
 
@@ -302,8 +302,18 @@ def main():
     parser.add_argument("--session-id", type=str, help="Evaluate a specific session ID")
     parser.add_argument("--invoke", type=str, help="Invoke the agent with this prompt, then evaluate")
     parser.add_argument("--all-recent", action="store_true", help="Evaluate the last 5 sessions")
+    parser.add_argument("--hours", type=int, default=None, help="Hours to look back for sessions")
+    parser.add_argument("--days", type=int, default=None, help="Days to look back for sessions")
     parser.add_argument("--output", type=str, default="eval_results.json", help="Output JSON file")
     args = parser.parse_args()
+
+    # Determine lookback window
+    if args.days:
+        minutes_back = args.days * 24 * 60
+    elif args.hours:
+        minutes_back = args.hours * 60
+    else:
+        minutes_back = 120  # default 2 hours
 
     logs_client = boto3.client("logs", region_name=REGION)
     agentcore_client = boto3.client(
@@ -337,36 +347,36 @@ def main():
         time.sleep(30)
 
         print(f"\n  Step 3: Evaluating...")
-        eval_result = evaluate_session(agentcore_client, logs_client, log_group, session_id)
+        eval_result = evaluate_session(agentcore_client, logs_client, log_group, session_id, minutes_back)
         evaluations.append(eval_result)
 
     elif args.session_id:
         # Evaluate specific session
-        eval_result = evaluate_session(agentcore_client, logs_client, log_group, args.session_id)
+        eval_result = evaluate_session(agentcore_client, logs_client, log_group, args.session_id, minutes_back)
         evaluations.append(eval_result)
 
     elif args.all_recent:
         # Evaluate recent sessions
-        print(f"\n  Finding recent sessions...")
-        sessions = get_recent_session_ids(logs_client, log_group, limit=5)
+        print(f"\n  Finding recent sessions (last {minutes_back} minutes)...")
+        sessions = get_recent_session_ids(logs_client, log_group, limit=5, minutes_back=minutes_back)
         if not sessions:
             print("  No sessions found in recent logs.")
             sys.exit(0)
 
         print(f"  Found {len(sessions)} sessions")
         for session_id in sessions:
-            eval_result = evaluate_session(agentcore_client, logs_client, log_group, session_id)
+            eval_result = evaluate_session(agentcore_client, logs_client, log_group, session_id, minutes_back)
             evaluations.append(eval_result)
 
     else:
         # Default: evaluate most recent session
-        print(f"\n  Finding most recent session...")
-        sessions = get_recent_session_ids(logs_client, log_group, limit=1)
+        print(f"\n  Finding most recent session (last {minutes_back} minutes)...")
+        sessions = get_recent_session_ids(logs_client, log_group, limit=1, minutes_back=minutes_back)
         if not sessions:
             print("  No sessions found. Invoke the agent first.")
             sys.exit(0)
 
-        eval_result = evaluate_session(agentcore_client, logs_client, log_group, sessions[0])
+        eval_result = evaluate_session(agentcore_client, logs_client, log_group, sessions[0], minutes_back)
         evaluations.append(eval_result)
 
     # Report
