@@ -126,7 +126,7 @@ def test_agent(client, agent_arn, agent_name, prompt):
                 # Truncate long responses for readability
                 if len(response_content) > 500:
                     print(f"\n✅ Response:\n{response_content[:500]}...")
-                    print("\n[Response truncated for display]")
+                    print("\n[Response truncated - full output in test_results.json]")
                 else:
                     print(f"\n✅ Response:\n{response_content}")
             except json.JSONDecodeError:
@@ -137,13 +137,13 @@ def test_agent(client, agent_arn, agent_name, prompt):
         else:
             print("\n⚠️  No response content received")
 
-        return True
+        return True, response_text
 
     except Exception as e:
         stop_event.set()
         spinner.join()
         print(f"\n❌ Error testing {agent_name}: {e}")
-        return False
+        return False, str(e)
 
 
 def test_multi_agent(orchestrator_arn, specialist_arn=None):
@@ -181,78 +181,61 @@ def test_multi_agent(orchestrator_arn, specialist_arn=None):
     )
 
     test_results = []
+    full_responses = []
 
     # Test 1: Simple query to Orchestrator
     print("\n" + "=" * 80)
     print("TEST 1: Simple Query (Orchestrator)")
     print("=" * 80)
-    result = test_agent(
-        agentcore_client,
-        orchestrator_arn,
-        "Orchestrator",
-        "Hello! Can you introduce yourself and your capabilities?",
-    )
-    test_results.append(("Simple Query", result))
+    prompt = "Hello! Can you introduce yourself and your capabilities?"
+    passed, response = test_agent(agentcore_client, orchestrator_arn, "Orchestrator", prompt)
+    test_results.append(("Simple Query", passed))
+    full_responses.append({"test": "Simple Query", "prompt": prompt, "passed": passed, "response": response})
 
     # Test 2: Complex query triggering A2A communication
     print("\n" + "=" * 80)
     print("TEST 2: Complex Query with A2A Communication (Specialist)")
     print("=" * 80)
-    result = test_agent(
-        agentcore_client,
-        orchestrator_arn,
-        "Orchestrator",
-        "I need expert analysis. Please coordinate with the specialist agent to provide a comprehensive explanation of cloud computing architectures and best practices.",
-    )
-    test_results.append(("A2A Communication - Specialist", result))
+    prompt = "I need expert analysis. Please coordinate with the specialist agent to provide a comprehensive explanation of cloud computing architectures and best practices."
+    passed, response = test_agent(agentcore_client, orchestrator_arn, "Orchestrator", prompt)
+    test_results.append(("A2A Communication - Specialist", passed))
+    full_responses.append({"test": "A2A Communication - Specialist", "prompt": prompt, "passed": passed, "response": response})
 
     # Test 3: Fact-checking query triggering Fact Checker agent
     print("\n" + "=" * 80)
     print("TEST 3: Fact Check Query (Fact Checker Agent)")
     print("=" * 80)
-    result = test_agent(
-        agentcore_client,
-        orchestrator_arn,
-        "Orchestrator",
-        "Please fact-check this claim: 'Amazon S3 provides 99.999999999% (11 nines) durability for objects stored across multiple Availability Zones.'",
-    )
-    test_results.append(("A2A Communication - Fact Checker", result))
+    prompt = "Please fact-check this claim: 'Amazon S3 provides 99.999999999% (11 nines) durability for objects stored across multiple Availability Zones.'"
+    passed, response = test_agent(agentcore_client, orchestrator_arn, "Orchestrator", prompt)
+    test_results.append(("A2A Communication - Fact Checker", passed))
+    full_responses.append({"test": "A2A Communication - Fact Checker", "prompt": prompt, "passed": passed, "response": response})
 
     # Test 4: Multi-agent query triggering BOTH specialist and fact checker
     print("\n" + "=" * 80)
     print("TEST 4: Multi-Agent Query (Both Specialist AND Fact Checker)")
     print("=" * 80)
-    result = test_agent(
-        agentcore_client,
-        orchestrator_arn,
-        "Orchestrator",
-        "I need you to do two things: First, get a detailed analysis from the specialist about how serverless computing works. Then, fact-check this claim: 'AWS Lambda functions can run for a maximum of 15 minutes.' Please use both agents.",
-    )
-    test_results.append(("A2A Multi-Agent Communication", result))
+    prompt = "I need you to do two things: First, get a detailed analysis from the specialist about how serverless computing works. Then, fact-check this claim: 'AWS Lambda functions can run for a maximum of 15 minutes.' Please use both agents."
+    passed, response = test_agent(agentcore_client, orchestrator_arn, "Orchestrator", prompt)
+    test_results.append(("A2A Multi-Agent Communication", passed))
+    full_responses.append({"test": "A2A Multi-Agent Communication", "prompt": prompt, "passed": passed, "response": response})
 
     # Test 5: Quality evaluation triggering Critic agent
     print("\n" + "=" * 80)
     print("TEST 5: Quality Evaluation (Critic Agent)")
     print("=" * 80)
-    result = test_agent(
-        agentcore_client,
-        orchestrator_arn,
-        "Orchestrator",
-        "Get the specialist to explain what Kubernetes is, then use the critic to evaluate the quality of the response. Tell me what score the critic gave.",
-    )
-    test_results.append(("A2A Communication - Critic", result))
+    prompt = "Get the specialist to explain what Kubernetes is, then use the critic to evaluate the quality of the response. Tell me what score the critic gave."
+    passed, response = test_agent(agentcore_client, orchestrator_arn, "Orchestrator", prompt)
+    test_results.append(("A2A Communication - Critic", passed))
+    full_responses.append({"test": "A2A Communication - Critic", "prompt": prompt, "passed": passed, "response": response})
 
     # Test 6: Full feedback loop (Specialist → Critic → retry)
     print("\n" + "=" * 80)
-    print("TEST 6: Quality Feedback Loop (Specialist → Critic → Improved Response)")
+    print("TEST 6: Quality Feedback Loop (Specialist -> Critic -> Improved Response)")
     print("=" * 80)
-    result = test_agent(
-        agentcore_client,
-        orchestrator_arn,
-        "Orchestrator",
-        "This is an important question that needs a high-quality answer. Ask the specialist to explain API gateway patterns, then have the critic evaluate it. If the critic scores it below 8, ask the specialist again incorporating the critic's feedback. I want the best possible answer.",
-    )
-    test_results.append(("A2A Quality Feedback Loop", result))
+    prompt = "This is an important question that needs a high-quality answer. Ask the specialist to explain API gateway patterns, then have the critic evaluate it. If the critic scores it below 8, ask the specialist again incorporating the critic's feedback. I want the best possible answer."
+    passed, response = test_agent(agentcore_client, orchestrator_arn, "Orchestrator", prompt)
+    test_results.append(("A2A Quality Feedback Loop", passed))
+    full_responses.append({"test": "A2A Quality Feedback Loop", "prompt": prompt, "passed": passed, "response": response})
 
     # Summary
     print("\n" + "=" * 80)
@@ -271,7 +254,13 @@ def test_multi_agent(orchestrator_arn, specialist_arn=None):
         print("✅ ALL TESTS PASSED")
     else:
         print("⚠️  SOME TESTS FAILED")
-    print("=" * 80 + "\n")
+    print("=" * 80)
+
+    # Save full responses to file
+    output_file = "test_results.json"
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(full_responses, f, indent=2, ensure_ascii=False)
+    print(f"\nFull responses saved to: {output_file}\n")
 
     return all_passed
 
