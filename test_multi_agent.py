@@ -260,7 +260,30 @@ def test_multi_agent(orchestrator_arn, specialist_arn=None):
     output_file = "test_results.json"
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(full_responses, f, indent=2, ensure_ascii=False)
-    print(f"\nFull responses saved to: {output_file}\n")
+
+    # Save CSV for easy viewing in spreadsheets
+    import csv
+    csv_file = "test_results.csv"
+    with open(csv_file, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Test", "Passed", "Prompt", "Response"])
+        for entry in full_responses:
+            # Parse the response JSON to extract the text
+            response_text = entry.get("response", "")
+            try:
+                parsed = json.loads(response_text)
+                display_response = parsed.get("response", parsed.get("error", response_text))
+            except (json.JSONDecodeError, TypeError):
+                display_response = response_text
+            writer.writerow([
+                entry.get("test", ""),
+                entry.get("passed", False),
+                entry.get("prompt", ""),
+                display_response,
+            ])
+
+    print(f"\nFull responses saved to: {output_file}")
+    print(f"CSV export saved to: {csv_file}\n")
 
     return all_passed
 
