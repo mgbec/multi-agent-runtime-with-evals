@@ -51,7 +51,16 @@ def create_critic_agent() -> Agent:
     IMPORTANT: Always output valid JSON. Nothing else."""
 
     model_id = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
-    model = BedrockModel(model_id=model_id)
+    guardrail_id = os.getenv("BEDROCK_GUARDRAIL_ID", "")
+    guardrail_ver = os.getenv("BEDROCK_GUARDRAIL_VER", "")
+
+    model_kwargs = {"model_id": model_id}
+    if guardrail_id and guardrail_ver:
+        model_kwargs["guardrail_config"] = {
+            "guardrailIdentifier": guardrail_id,
+            "guardrailVersion": guardrail_ver,
+        }
+    model = BedrockModel(**model_kwargs)
 
     return Agent(model=model, system_prompt=system_prompt, name="CriticAgent")
 

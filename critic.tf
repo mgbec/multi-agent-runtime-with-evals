@@ -18,9 +18,11 @@ resource "aws_bedrockagentcore_agent_runtime" "critic" {
   }
 
   environment_variables = {
-    AWS_REGION         = data.aws_region.current.region
-    AWS_DEFAULT_REGION = data.aws_region.current.region
-    BEDROCK_MODEL_ID   = var.bedrock_model_id
+    AWS_REGION             = data.aws_region.current.region
+    AWS_DEFAULT_REGION     = data.aws_region.current.region
+    BEDROCK_MODEL_ID       = var.bedrock_model_id
+    BEDROCK_GUARDRAIL_ID   = aws_bedrock_guardrail.agent_guardrail.guardrail_id
+    BEDROCK_GUARDRAIL_VER  = aws_bedrock_guardrail_version.agent_guardrail.version
   }
 
   tags = {
